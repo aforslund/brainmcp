@@ -210,35 +210,35 @@ export class Brain {
   private getAssociations(nodeId: number) {
     const outgoing = this.db
       .prepare(`
-        SELECT a.label, a.weight, n.*
+        SELECT a.label, a.weight AS assoc_weight, n.*
         FROM associations a
         JOIN nodes n ON n.id = a.target_id
         WHERE a.source_id = ?
         ORDER BY a.weight DESC
       `)
-      .all(nodeId) as (BrainNode & { label: string; weight: number })[];
+      .all(nodeId) as (BrainNode & { label: string; assoc_weight: number })[];
 
     const incoming = this.db
       .prepare(`
-        SELECT a.label, a.weight, n.*
+        SELECT a.label, a.weight AS assoc_weight, n.*
         FROM associations a
         JOIN nodes n ON n.id = a.source_id
         WHERE a.target_id = ?
         ORDER BY a.weight DESC
       `)
-      .all(nodeId) as (BrainNode & { label: string; weight: number })[];
+      .all(nodeId) as (BrainNode & { label: string; assoc_weight: number })[];
 
     return [
       ...outgoing.map((r) => ({
         node: { id: r.id, name: r.name, type: r.type as NodeType, content: r.content, weight: r.weight, created_at: r.created_at, updated_at: r.updated_at },
         label: r.label,
-        weight: r.weight,
+        weight: r.assoc_weight,
         direction: "outgoing" as const,
       })),
       ...incoming.map((r) => ({
         node: { id: r.id, name: r.name, type: r.type as NodeType, content: r.content, weight: r.weight, created_at: r.created_at, updated_at: r.updated_at },
         label: r.label,
-        weight: r.weight,
+        weight: r.assoc_weight,
         direction: "incoming" as const,
       })),
     ];

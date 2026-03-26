@@ -1,0 +1,25 @@
+{
+  "name": "brainmcp",
+  "version": "1.0.0",
+  "description": "Associative memory graph MCP server — gives LLMs a persistent brain",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "brainmcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "better-sqlite3": "^11.7.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

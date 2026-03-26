@@ -45,7 +45,7 @@ BrainMCP exposes 8 tools via MCP:
 ## Installation
 
 ```bash
-git clone https://github.com/youruser/brainmcp.git
+git clone https://github.com/aforslund/brainmcp.git
 cd brainmcp
 npm install
 npm run build

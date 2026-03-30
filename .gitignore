@@ -2,6 +2,8 @@ node_modules/
 dist/
 brain.db
 experiments/*.db
+experiments/.mcp-dialogue.json
+experiments/.codex/
 *.db-wal
 *.db-shm
 .DS_Store

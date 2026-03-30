@@ -61,8 +61,10 @@ const AVAILABLE_MODELS: Record<string, CLIModel> = {
     name: "Codex",
     command: "codex",
     buildArgs: (prompt, mcpConfigPath) => [
-      "--full-auto",
-      "--quiet",
+      "exec",
+      "-C", __dirname,
+      "--sandbox", "workspace-write",
+      "--ask-for-approval", "never",
       prompt,
     ],
     color: "\x1b[36m",
@@ -73,23 +75,40 @@ const RESET = "\x1b[0m";
 const DIM = "\x1b[2m";
 const BOLD = "\x1b[1m";
 
-// --- Build MCP config file ---
+// --- Build MCP config files ---
 
 function writeMcpConfig(dbPath: string): string {
   const configPath = path.join(__dirname, ".mcp-dialogue.json");
   const absoluteIndexPath = path.resolve(__dirname, "..", "dist", "index.js");
 
-  const config = {
-    mcpServers: {
-      brainmcp: {
-        command: "node",
-        args: [absoluteIndexPath, "--db-path", dbPath],
-      },
-    },
+  const mcpServerConfig = {
+    command: "node",
+    args: [absoluteIndexPath, "--db-path", dbPath],
   };
 
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  // Claude uses --mcp-config flag
+  const claudeConfig = { mcpServers: { brainmcp: mcpServerConfig } };
+  fs.writeFileSync(configPath, JSON.stringify(claudeConfig, null, 2));
+
+  // Codex reads from .codex/mcp.json in the working directory
+  // Write a project-level config so codex exec picks it up
+  const codexDir = path.join(__dirname, ".codex");
+  if (!fs.existsSync(codexDir)) {
+    fs.mkdirSync(codexDir, { recursive: true });
+  }
+  const codexConfig = { mcpServers: { brainmcp: mcpServerConfig } };
+  fs.writeFileSync(path.join(codexDir, "mcp.json"), JSON.stringify(codexConfig, null, 2));
+
   return configPath;
+}
+
+function cleanupMcpConfig(): void {
+  const configPath = path.join(__dirname, ".mcp-dialogue.json");
+  const codexConfigPath = path.join(__dirname, ".codex", "mcp.json");
+  const codexDir = path.join(__dirname, ".codex");
+  try { fs.unlinkSync(configPath); } catch {}
+  try { fs.unlinkSync(codexConfigPath); } catch {}
+  try { fs.rmdirSync(codexDir); } catch {}
 }
 
 // --- Build the turn prompt ---
@@ -316,7 +335,7 @@ async function main() {
 
   // Cleanup
   db.close();
-  fs.unlinkSync(mcpConfigPath);
+  cleanupMcpConfig();
   console.log(`\n${DIM}Database saved to: ${dbPath}${RESET}`);
   console.log(`${DIM}Re-run to continue building on this brain, or delete the db to start fresh.${RESET}`);
 }

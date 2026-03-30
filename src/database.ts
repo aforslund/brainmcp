@@ -1,9 +1,20 @@
 import Database from "better-sqlite3";
 import path from "path";
+import os from "os";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB_PATH = path.join(__dirname, "..", "brain.db");
+
+function getDefaultDbPath(): string {
+  const homeDir = path.join(os.homedir(), ".brainmcp");
+  if (!fs.existsSync(homeDir)) {
+    fs.mkdirSync(homeDir, { recursive: true });
+  }
+  return path.join(homeDir, "brain.db");
+}
+
+const DEFAULT_DB_PATH = getDefaultDbPath();
 
 export function createDatabase(dbPath?: string): Database.Database {
   const db = new Database(dbPath ?? DEFAULT_DB_PATH);

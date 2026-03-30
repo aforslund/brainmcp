@@ -6,7 +6,18 @@ import { z } from "zod";
 import { createDatabase } from "./database.js";
 import { Brain } from "./brain.js";
 
-const db = createDatabase();
+function parseArgs(): { dbPath?: string } {
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--db-path" && args[i + 1]) {
+      return { dbPath: args[i + 1] };
+    }
+  }
+  return {};
+}
+
+const { dbPath } = parseArgs();
+const db = createDatabase(dbPath);
 const brain = new Brain(db);
 
 const server = new McpServer({

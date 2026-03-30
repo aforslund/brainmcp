@@ -76,6 +76,21 @@ No cloning needed — just configure your MCP client to use `npx`:
 
 That's it. No cloning, no building, no external database, no API keys, no Docker.
 
+Your brain is stored at `~/.brainmcp/brain.db` by default. All MCP clients share the same brain automatically.
+
+To use a custom database path:
+
+```json
+{
+  "mcpServers": {
+    "brainmcp": {
+      "command": "npx",
+      "args": ["-y", "brainmcp", "--db-path", "/path/to/my/brain.db"]
+    }
+  }
+}
+```
+
 ### Install from source
 
 ```bash

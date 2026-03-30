@@ -44,6 +44,40 @@ BrainMCP exposes 8 tools via MCP:
 
 ## Installation
 
+### Quick install (recommended)
+
+No cloning needed — just configure your MCP client to use `npx`:
+
+**Claude Code** — add to `~/.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "brainmcp": {
+      "command": "npx",
+      "args": ["-y", "brainmcp"]
+    }
+  }
+}
+```
+
+**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+
+```json
+{
+  "mcpServers": {
+    "brainmcp": {
+      "command": "npx",
+      "args": ["-y", "brainmcp"]
+    }
+  }
+}
+```
+
+That's it. No cloning, no building, no external database, no API keys, no Docker.
+
+### Install from source
+
 ```bash
 git clone https://github.com/aforslund/brainmcp.git
 cd brainmcp
@@ -51,13 +85,7 @@ npm install
 npm run build
 ```
 
-That's it. No external database, no API keys, no Docker.
-
-## Configuration
-
-### Claude Code
-
-Add to your `~/.mcp.json`:
+Then point your MCP client at the built file:
 
 ```json
 {
@@ -70,7 +98,9 @@ Add to your `~/.mcp.json`:
 }
 ```
 
-To auto-allow brain tools without confirmation prompts, add to your Claude Code `settings.json`:
+## Configuration
+
+To auto-allow brain tools without confirmation prompts in Claude Code, add to your `settings.json`:
 
 ```json
 {
@@ -85,21 +115,6 @@ To auto-allow brain tools without confirmation prompts, add to your Claude Code 
       "mcp__brainmcp__forget",
       "mcp__brainmcp__search"
     ]
-  }
-}
-```
-
-### Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
-
-```json
-{
-  "mcpServers": {
-    "brainmcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/brainmcp/dist/index.js"]
-    }
   }
 }
 ```

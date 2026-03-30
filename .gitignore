@@ -1,6 +1,7 @@
 node_modules/
 dist/
 brain.db
+experiments/*.db
 *.db-wal
 *.db-shm
 .DS_Store

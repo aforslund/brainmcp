@@ -583,7 +583,7 @@ function generateViz(analysis?: string) {
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
     background: #1a1a2e; border: 1px solid #333; border-radius: 6px;
     padding: 10px 20px; font-size: 14px; font-weight: 700; color: #fff;
-    white-space: nowrap;
+    max-width: 70vw; text-align: center; line-height: 1.4;
   }
   #stats {
     position: absolute; bottom: 16px; left: 16px; background: #1a1a2e; border: 1px solid #333;

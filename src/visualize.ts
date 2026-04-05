@@ -6,7 +6,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = createDatabase();
+
+const dbFlag = process.argv.indexOf("--db");
+const dbPath = dbFlag !== -1 && process.argv[dbFlag + 1] ? process.argv[dbFlag + 1] : undefined;
+const db = createDatabase(dbPath);
 
 interface Node {
   id: number;

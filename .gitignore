@@ -12,5 +12,6 @@ brain-viz.html
 explore-*.html
 explore-*-analysis.md
 explore-*-eli5.md
+*-eli5.md
 .explore-mcp-config.json
 .DS_Store

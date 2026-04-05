@@ -9,7 +9,7 @@ import { Brain } from "./brain.js";
 function parseArgs(): { dbPath?: string } {
   const args = process.argv.slice(2);
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--db-path" && args[i + 1]) {
+    if ((args[i] === "--db-path" || args[i] === "--db") && args[i + 1]) {
       return { dbPath: args[i + 1] };
     }
   }

@@ -1,9 +1,16 @@
 node_modules/
 dist/
 brain.db
+explore-*.db
 experiments/*.db
 experiments/.mcp-dialogue.json
 experiments/.codex/
 *.db-wal
 *.db-shm
+.env
+brain-viz.html
+explore-*.html
+explore-*-analysis.md
+explore-*-eli5.md
+.explore-mcp-config.json
 .DS_Store

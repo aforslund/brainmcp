@@ -220,6 +220,86 @@ Here's what a natural conversation with BrainMCP looks like:
 > - **Daybreak** — Theme engine (connected to Nightfall)
 > - ...and any other projects previously stored
 
+## Explore Scripts
+
+BrainMCP includes standalone explore scripts that build knowledge graphs about any topic from scratch. The LLM researches the topic via web search, builds a graph iteratively, then generates a structural analysis and interactive D3.js visualization.
+
+Each explore run produces three files:
+- `explore-{slug}.db` — SQLite knowledge graph
+- `explore-{slug}.html` — Self-contained interactive D3.js visualization
+- `explore-{slug}-analysis.md` — Structural analysis (key findings, feedback loops, hypotheses)
+
+### Option A: With an Anthropic API key
+
+Uses the Anthropic API directly. Requires an API key with access to Claude.
+
+```bash
+npm run explore -- --key <YOUR_ANTHROPIC_API_KEY> "Your topic here" [iterations] [model]
+```
+
+**Arguments:**
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--key` | (required) | Your Anthropic API key |
+| topic | `"How global monetary policy actually works"` | The question or concept to explore |
+| iterations | `10` | Number of research passes (more = deeper graph) |
+| model | `claude-sonnet-4-6` | Claude model ID to use |
+
+**Example:**
+```bash
+npm run explore -- --key sk-ant-... "What prevents climate solutions from being implemented at scale" 15
+```
+
+Each iteration uses web search + brain tools to research the topic and build the graph incrementally through four phases: Foundation (core concepts) -> Deepening (cause-and-effect) -> Connections (cross-cutting relationships) -> Synthesis (patterns and gaps).
+
+### Option B: With a Claude Code subscription (no API key)
+
+Uses your existing Claude Code license by spawning `claude -p` for each iteration. No API key needed — if you can run `claude` in your terminal, this works.
+
+```bash
+npm run explore-cc -- "Your topic here" [iterations]
+```
+
+**Arguments:**
+| Argument | Default | Description |
+|----------|---------|-------------|
+| topic | (required) | The question or concept to explore |
+| iterations | `10` | Number of research passes |
+
+**Example:**
+```bash
+npm run explore-cc -- "Why do societies struggle to implement climate solutions" 10
+```
+
+This creates a temporary MCP config that points a fresh brainmcp server at the explore database, then runs each iteration as an isolated `claude -p` call with web search and brain tools allowed.
+
+### Querying an existing graph
+
+Use `explore-ask` to ask questions against a previously generated graph:
+
+```bash
+# List available graphs
+npm run explore-ask
+
+# One-shot question
+npm run explore-ask -- "climate-solutions" "What are the main feedback loops?"
+
+# Interactive session (opens claude with the graph loaded)
+npm run explore-ask -- "climate-solutions"
+```
+
+### Visualizing the main brain
+
+To generate a standalone visualization of your main `brain.db`:
+
+```bash
+npm run viz
+```
+
+This outputs `brain-graph.html` at the project root.
+
+---
+
 ## Tech stack
 
 - **TypeScript** — source language

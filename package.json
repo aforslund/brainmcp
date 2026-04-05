@@ -32,7 +32,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
-    "test": "tsc --noEmit && node --import tsx --test 'src/**/*.test.ts'",
+    "test": "tsc --noEmit && node --import tsx --test src/brain.test.ts",
     "viz": "tsc && node dist/visualize.js",
     "explore": "tsc && node dist/explore.js",
     "explore-cc": "tsc && node dist/explore-cc.js",

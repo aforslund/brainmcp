@@ -245,6 +245,49 @@ Be specific. Reference actual nodes and edges. Draw real conclusions from the st
   }
 }
 
+// --- ELI5 ---
+function generateEli5(analysis: string): string {
+  const db = new Database(dbPath, { readonly: true });
+  const nodeCount = (db.prepare("SELECT COUNT(*) as c FROM nodes").get() as { c: number }).c;
+  const edgeCount = (db.prepare("SELECT COUNT(*) as c FROM associations").get() as { c: number }).c;
+  db.close();
+
+  const eli5Prompt = `You are a science communicator. Below is a structural analysis of a knowledge graph about: "${concept}"
+
+The graph has ${nodeCount} nodes and ${edgeCount} edges.
+
+ANALYSIS:
+${analysis}
+
+Write an ELI5 (Explain Like I'm 5) version of this analysis as a markdown document. Guidelines:
+- Start with a # heading that captures the core question in accessible language
+- Add an italic subheading: *Based on analysis of a ${nodeCount}-node, ${edgeCount}-edge knowledge graph...*
+- Write 1,000-2,000 words in plain, accessible language
+- Use analogies and concrete examples to explain complex mechanisms
+- Structure with clear ## subheadings
+- Highlight the most surprising or counterintuitive findings
+- End with a clear "bottom line" section
+- No jargon without explanation
+- No emojis`;
+
+  try {
+    const result = execFileSync("claude", [
+      "-p",
+      "--model", "sonnet",
+      "--no-session-persistence",
+      eli5Prompt,
+    ], {
+      encoding: "utf8",
+      maxBuffer: 20 * 1024 * 1024,
+      timeout: 300000,
+    });
+    return result.trim();
+  } catch (err: unknown) {
+    console.error("  ELI5 generation failed, skipping.");
+    return "";
+  }
+}
+
 // --- Visualization ---
 function generateViz(analysis: string) {
   const db = new Database(dbPath, { readonly: true });
@@ -483,6 +526,14 @@ async function main() {
     console.log(`\n${analysis}`);
     writeFileSync(analysisPath, `# Analysis: ${concept}\n\n${analysis}\n`);
     console.log(`\nAnalysis written to ${analysisPath}`);
+
+    console.log(`\n--- Generating ELI5 summary ---`);
+    const eli5 = generateEli5(analysis);
+    if (eli5) {
+      const eli5Path = path.join(__dirname, "..", `explore-${slug}-eli5.md`);
+      writeFileSync(eli5Path, eli5);
+      console.log(`ELI5 written to ${eli5Path}`);
+    }
   }
 
   generateViz(analysis);

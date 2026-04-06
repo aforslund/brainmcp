@@ -424,6 +424,13 @@ async function main() {
   writeFileSync(analysisPath, `# Analysis: ${concept}\n\n${analysis}\n`);
   console.log(`\nAnalysis written to ${analysisPath}`);
 
+  // --- ELI5 phase ---
+  console.log(`\n--- Generating ELI5 summary ---`);
+  const eli5 = await generateEli5(analysis);
+  const eli5Path = path.join(__dirname, "..", `explore-${slug}-eli5.md`);
+  writeFileSync(eli5Path, eli5);
+  console.log(`ELI5 written to ${eli5Path}`);
+
   generateViz(analysis);
   console.log(`Visualization written to ${outPath}`);
   console.log(`Open it in your browser to explore the graph.`);
@@ -501,6 +508,41 @@ Be specific. Reference actual nodes and edges. Draw real conclusions from the st
     model,
     max_tokens: 8000,
     messages: [{ role: "user", content: analysisPrompt }],
+  });
+
+  const textBlocks = response.content.filter(
+    (b): b is Anthropic.TextBlock => b.type === "text"
+  );
+  return textBlocks.map((b) => b.text).join("\n");
+}
+
+// --- ELI5 ---
+async function generateEli5(analysis: string): Promise<string> {
+  const nodeCount = (db.prepare("SELECT COUNT(*) as c FROM nodes").get() as { c: number }).c;
+  const edgeCount = (db.prepare("SELECT COUNT(*) as c FROM associations").get() as { c: number }).c;
+
+  const eli5Prompt = `You are a science communicator. Below is a structural analysis of a knowledge graph about: "${concept}"
+
+The graph has ${nodeCount} nodes and ${edgeCount} edges.
+
+ANALYSIS:
+${analysis}
+
+Write an ELI5 (Explain Like I'm 5) version of this analysis as a markdown document. Guidelines:
+- Start with a # heading that captures the core question in accessible language
+- Add an italic subheading: *Based on analysis of a ${nodeCount}-node, ${edgeCount}-edge knowledge graph...*
+- Write 1,000-2,000 words in plain, accessible language
+- Use analogies and concrete examples to explain complex mechanisms
+- Structure with clear ## subheadings
+- Highlight the most surprising or counterintuitive findings
+- End with a clear "bottom line" section
+- No jargon without explanation
+- No emojis`;
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 4000,
+    messages: [{ role: "user", content: eli5Prompt }],
   });
 
   const textBlocks = response.content.filter(

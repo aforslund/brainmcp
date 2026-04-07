@@ -10,8 +10,9 @@
  * Usage: npm run explore-cc -- "topic" [iterations]
  */
 
-import { execFileSync } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
+import { execFileSync, execSync } from "child_process";
+import { writeFileSync, unlinkSync, writeSync, openSync, closeSync } from "fs";
+import { tmpdir } from "os";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -228,19 +229,24 @@ Based on the graph structure, what predictions or hypotheses can you generate? W
 Be specific. Reference actual nodes and edges. Draw real conclusions from the structure.`;
 
   try {
-    const result = execFileSync("claude", [
-      "-p",
-      "--model", "sonnet",
-      "--no-session-persistence",
-      analysisPrompt,
-    ], {
+    // Write prompt to temp file to avoid CLI arg length issues
+    const promptFile = path.join(tmpdir(), `brainmcp-analysis-${Date.now()}.txt`);
+    writeFileSync(promptFile, analysisPrompt);
+    const result = execFileSync(`cat "${promptFile}" | claude -p --model sonnet --no-session-persistence`, {
       encoding: "utf8",
       maxBuffer: 20 * 1024 * 1024,
       timeout: 300000,
+      shell: true,
     });
+    try { unlinkSync(promptFile); } catch {}
     return result.trim();
   } catch (err: unknown) {
-    console.error("  Analysis failed, skipping.");
+    const error = err as Error & { status?: number; stderr?: string; stdout?: string };
+    console.error(`  Analysis failed:`);
+    console.error(`    Exit status: ${error.status}`);
+    if (error.stderr) console.error(`    stderr: ${error.stderr.slice(0, 500)}`);
+    if (error.stdout) console.error(`    stdout (truncated): ${error.stdout.slice(0, 300)}`);
+    console.error(`    message: ${error.message?.slice(0, 500)}`);
     return "";
   }
 }
@@ -271,19 +277,23 @@ Write an ELI5 (Explain Like I'm 5) version of this analysis as a markdown docume
 - No emojis`;
 
   try {
-    const result = execFileSync("claude", [
-      "-p",
-      "--model", "sonnet",
-      "--no-session-persistence",
-      eli5Prompt,
-    ], {
+    const promptFile = path.join(tmpdir(), `brainmcp-eli5-${Date.now()}.txt`);
+    writeFileSync(promptFile, eli5Prompt);
+    const result = execFileSync(`cat "${promptFile}" | claude -p --model sonnet --no-session-persistence`, {
       encoding: "utf8",
       maxBuffer: 20 * 1024 * 1024,
       timeout: 300000,
+      shell: true,
     });
+    try { unlinkSync(promptFile); } catch {}
     return result.trim();
   } catch (err: unknown) {
-    console.error("  ELI5 generation failed, skipping.");
+    const error = err as Error & { status?: number; stderr?: string; stdout?: string };
+    console.error(`  ELI5 generation failed:`);
+    console.error(`    Exit status: ${error.status}`);
+    if (error.stderr) console.error(`    stderr: ${error.stderr.slice(0, 500)}`);
+    if (error.stdout) console.error(`    stdout (truncated): ${error.stdout.slice(0, 300)}`);
+    console.error(`    message: ${error.message?.slice(0, 500)}`);
     return "";
   }
 }

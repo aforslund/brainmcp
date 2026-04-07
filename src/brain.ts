@@ -4,6 +4,13 @@ import type { BrainNode, Association, NodeType, RecallResult } from "./types.js"
 export class Brain {
   private db: Database.Database;
 
+  // Co-activation tracking (Hebbian: "fire together, wire together")
+  private recentRecalls: { nodeId: number; timestamp: number }[] = [];
+  private static CO_ACTIVATION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+  private static CO_ACTIVATION_INITIAL_WEIGHT = 0.5;
+  private static CO_ACTIVATION_INCREMENT = 0.1;
+  private static CO_ACTIVATION_LABEL = "co_activated";
+
   constructor(db: Database.Database) {
     this.db = db;
   }
@@ -64,6 +71,9 @@ export class Brain {
       if (!fuzzy) return null;
       node = fuzzy;
     }
+
+    // Hebbian co-activation: wire together nodes recalled in the same session window
+    this.trackCoActivation(node);
 
     const associations = this.getAssociations(node.id);
 
@@ -205,6 +215,54 @@ export class Brain {
         "SELECT * FROM nodes WHERE name LIKE ? ORDER BY weight DESC LIMIT ?"
       )
       .all(`%${query}%`, limit) as BrainNode[];
+  }
+
+  private trackCoActivation(node: BrainNode): void {
+    const now = Date.now();
+
+    // Prune expired entries
+    this.recentRecalls = this.recentRecalls.filter(
+      (r) => now - r.timestamp < Brain.CO_ACTIVATION_WINDOW_MS
+    );
+
+    // Create or strengthen co_activated edges with all other recent recalls
+    for (const recent of this.recentRecalls) {
+      if (recent.nodeId === node.id) continue;
+
+      // Consistent direction: lower ID -> higher ID to avoid duplicate edges
+      const [srcId, tgtId] =
+        recent.nodeId < node.id
+          ? [recent.nodeId, node.id]
+          : [node.id, recent.nodeId];
+
+      const existing = this.db
+        .prepare(
+          "SELECT * FROM associations WHERE source_id = ? AND target_id = ? AND label = ?"
+        )
+        .get(srcId, tgtId, Brain.CO_ACTIVATION_LABEL) as Association | undefined;
+
+      if (existing) {
+        this.db
+          .prepare(
+            `UPDATE associations SET weight = MIN(weight + ?, 10.0), updated_at = datetime('now') WHERE id = ?`
+          )
+          .run(Brain.CO_ACTIVATION_INCREMENT, existing.id);
+      } else {
+        this.db
+          .prepare(
+            "INSERT INTO associations (source_id, target_id, label, weight) VALUES (?, ?, ?, ?)"
+          )
+          .run(srcId, tgtId, Brain.CO_ACTIVATION_LABEL, Brain.CO_ACTIVATION_INITIAL_WEIGHT);
+      }
+    }
+
+    // Track this recall (update timestamp if already present)
+    const existingIdx = this.recentRecalls.findIndex((r) => r.nodeId === node.id);
+    if (existingIdx >= 0) {
+      this.recentRecalls[existingIdx].timestamp = now;
+    } else {
+      this.recentRecalls.push({ nodeId: node.id, timestamp: now });
+    }
   }
 
   private getAssociations(nodeId: number) {

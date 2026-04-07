@@ -257,6 +257,105 @@ describe("Brain", () => {
     });
   });
 
+  describe("co-activation (Hebbian)", () => {
+    it("should create co_activated edge when two nodes are recalled in same session", () => {
+      brain.remember("Alice", "person");
+      brain.remember("Bob", "person");
+      brain.recall("Alice");
+      brain.recall("Bob");
+
+      // Check that a co_activated association was created
+      const assoc = db
+        .prepare(
+          "SELECT * FROM associations WHERE label = 'co_activated'"
+        )
+        .all() as any[];
+      assert.equal(assoc.length, 1);
+      assert.equal(assoc[0].weight, 0.5);
+    });
+
+    it("should strengthen co_activated edge on repeated co-recall", () => {
+      brain.remember("Alice", "person");
+      brain.remember("Bob", "person");
+      brain.recall("Alice");
+      brain.recall("Bob");
+      // Recall both again
+      brain.recall("Alice");
+      brain.recall("Bob");
+
+      const assoc = db
+        .prepare(
+          "SELECT * FROM associations WHERE label = 'co_activated'"
+        )
+        .all() as any[];
+      assert.equal(assoc.length, 1);
+      // Initial 0.5, then +0.1 for each subsequent co-recall
+      assert.ok(assoc[0].weight > 0.5);
+    });
+
+    it("should use consistent edge direction (lower ID -> higher ID)", () => {
+      const alice = brain.remember("Alice", "person");
+      const bob = brain.remember("Bob", "person");
+      // Recall in reverse order
+      brain.recall("Bob");
+      brain.recall("Alice");
+
+      const assoc = db
+        .prepare(
+          "SELECT * FROM associations WHERE label = 'co_activated'"
+        )
+        .get() as any;
+      assert.ok(assoc);
+      const lowId = Math.min(alice.id, bob.id);
+      const highId = Math.max(alice.id, bob.id);
+      assert.equal(assoc.source_id, lowId);
+      assert.equal(assoc.target_id, highId);
+    });
+
+    it("should not self-co-activate on repeated recall of same node", () => {
+      brain.remember("Alice", "person");
+      brain.recall("Alice");
+      brain.recall("Alice");
+
+      const assoc = db
+        .prepare(
+          "SELECT * FROM associations WHERE label = 'co_activated'"
+        )
+        .all() as any[];
+      assert.equal(assoc.length, 0);
+    });
+
+    it("should co-activate across multiple nodes", () => {
+      brain.remember("Alice", "person");
+      brain.remember("Bob", "person");
+      brain.remember("Carol", "person");
+      brain.recall("Alice");
+      brain.recall("Bob");
+      brain.recall("Carol");
+
+      // Should have 3 co_activated edges: Alice-Bob, Alice-Carol, Bob-Carol
+      const assocs = db
+        .prepare(
+          "SELECT * FROM associations WHERE label = 'co_activated'"
+        )
+        .all() as any[];
+      assert.equal(assocs.length, 3);
+    });
+
+    it("should not create co_activated edges for failed recalls", () => {
+      brain.remember("Alice", "person");
+      brain.recall("Alice");
+      brain.recall("NonExistent"); // returns null
+
+      const assoc = db
+        .prepare(
+          "SELECT * FROM associations WHERE label = 'co_activated'"
+        )
+        .all() as any[];
+      assert.equal(assoc.length, 0);
+    });
+  });
+
   describe("graph traversal", () => {
     it("should find 2-hop related concepts", () => {
       brain.associate("Alice", "person", "Bob", "person", "knows");

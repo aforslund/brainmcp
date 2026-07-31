@@ -34,10 +34,10 @@ BrainMCP exposes 8 tools via MCP:
 | Tool | Description |
 |---|---|
 | **remember** | Store a concept in the brain with a name, type, optional content, and importance weight (0-10). Creates or updates. |
-| **recall** | Retrieve a concept with all its direct associations and 2-hop related concepts. Fuzzy matches if exact name not found. |
-| **associate** | Link two concepts with a labeled, weighted edge (e.g. `works_on`, `built_with`, `part_of`). Auto-creates nodes if needed. |
-| **strengthen** | Increase the weight of an association when a connection is reinforced or validated. |
-| **weaken** | Decrease the weight of an association when something becomes less relevant or is contradicted. |
+| **recall** | Retrieve a concept with its direct associations and the strongest related concepts up to 2 hops away. Fuzzy matches if exact name not found. |
+| **associate** | Link two concepts with a labeled, weighted edge (e.g. `works_on`, `built_with`, `part_of`). Auto-creates nodes if needed. Never lowers an existing edge's weight. |
+| **strengthen** | Increase the weight of associations between two concepts (direction-agnostic) when a connection is reinforced or validated. |
+| **weaken** | Decrease the weight of associations between two concepts (direction-agnostic) when something becomes less relevant or is contradicted. |
 | **reflect** | See what's "top of mind" — returns the highest-weighted concepts and associations in the brain. |
 | **forget** | Prune weak associations and orphaned nodes below a weight threshold. Simulates memory decay. |
 | **search** | Fuzzy search across all concepts by name, with optional type filter. |
@@ -189,6 +189,8 @@ When you `recall` a concept, BrainMCP does a BFS traversal up to 2 hops from the
 1. The node itself with all its properties
 2. Direct associations (1 hop) with their labels, weights, and directions
 3. Related concepts (2 hops) with the path taken to reach them
+
+The traversal expands the strongest edges first and caps related results at 25, so recalls stay compact even in dense graphs.
 
 All data lives in a single `brain.db` file. WAL mode is enabled for concurrent read performance.
 

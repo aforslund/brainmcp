@@ -11,8 +11,15 @@ export class Brain {
   private static CO_ACTIVATION_INCREMENT = 0.1;
   private static CO_ACTIVATION_LABEL = "co_activated";
 
+  // Cap on related nodes returned by recall, so dense graphs don't flood context
+  private static RELATED_LIMIT = 25;
+
   constructor(db: Database.Database) {
     this.db = db;
+  }
+
+  private static escapeLike(term: string): string {
+    return term.replace(/[\\%_]/g, (c) => `\\${c}`);
   }
 
   remember(
@@ -62,11 +69,18 @@ export class Brain {
 
     if (!node) {
       // fuzzy search
-      const fuzzy = this.db
-        .prepare(
-          "SELECT * FROM nodes WHERE name LIKE ? ORDER BY weight DESC LIMIT 1"
-        )
-        .get(`%${query}%`) as BrainNode | undefined;
+      const pattern = `%${Brain.escapeLike(query)}%`;
+      const fuzzy = (type
+        ? this.db
+            .prepare(
+              "SELECT * FROM nodes WHERE name LIKE ? ESCAPE '\\' AND type = ? ORDER BY weight DESC LIMIT 1"
+            )
+            .get(pattern, type)
+        : this.db
+            .prepare(
+              "SELECT * FROM nodes WHERE name LIKE ? ESCAPE '\\' ORDER BY weight DESC LIMIT 1"
+            )
+            .get(pattern)) as BrainNode | undefined;
 
       if (!fuzzy) return null;
       node = fuzzy;
@@ -89,7 +103,7 @@ export class Brain {
     targetName: string,
     targetType: NodeType,
     label: string = "related_to",
-    weight: number = 1.0
+    weight?: number
   ): { source: BrainNode; target: BrainNode; association: Association } {
     const source = this.remember(sourceName, sourceType);
     const target = this.remember(targetName, targetType);
@@ -101,17 +115,22 @@ export class Brain {
       .get(source.id, target.id, label) as Association | undefined;
 
     if (existing) {
+      // Never lower an accumulated weight on re-association — use weaken for that
+      const newWeight =
+        weight === undefined
+          ? existing.weight
+          : Math.max(existing.weight, weight);
       this.db
         .prepare(
           `UPDATE associations SET weight = ?, updated_at = datetime('now') WHERE id = ?`
         )
-        .run(weight, existing.id);
+        .run(newWeight, existing.id);
     } else {
       this.db
         .prepare(
           "INSERT INTO associations (source_id, target_id, label, weight) VALUES (?, ?, ?, ?)"
         )
-        .run(source.id, target.id, label, weight);
+        .run(source.id, target.id, label, weight ?? 1.0);
     }
 
     const association = this.db
@@ -128,23 +147,8 @@ export class Brain {
     targetName: string,
     label?: string,
     amount: number = 0.2
-  ): Association | null {
-    const query = label
-      ? this.db.prepare(`
-          UPDATE associations SET weight = MIN(weight + ?, 10.0), updated_at = datetime('now')
-          WHERE source_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-            AND target_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-            AND label = ?
-          RETURNING *
-        `).get(amount, sourceName, targetName, label)
-      : this.db.prepare(`
-          UPDATE associations SET weight = MIN(weight + ?, 10.0), updated_at = datetime('now')
-          WHERE source_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-            AND target_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-          RETURNING *
-        `).get(amount, sourceName, targetName);
-
-    return (query as Association) ?? null;
+  ): Association[] {
+    return this.adjustWeight(sourceName, targetName, label, amount);
   }
 
   weaken(
@@ -152,23 +156,34 @@ export class Brain {
     targetName: string,
     label?: string,
     amount: number = 0.2
-  ): Association | null {
-    const query = label
-      ? this.db.prepare(`
-          UPDATE associations SET weight = MAX(weight - ?, 0.0), updated_at = datetime('now')
-          WHERE source_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-            AND target_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-            AND label = ?
-          RETURNING *
-        `).get(amount, sourceName, targetName, label)
-      : this.db.prepare(`
-          UPDATE associations SET weight = MAX(weight - ?, 0.0), updated_at = datetime('now')
-          WHERE source_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-            AND target_id = (SELECT id FROM nodes WHERE name = ? LIMIT 1)
-          RETURNING *
-        `).get(amount, sourceName, targetName);
+  ): Association[] {
+    return this.adjustWeight(sourceName, targetName, label, -amount);
+  }
 
-    return (query as Association) ?? null;
+  // Direction-agnostic: matches edges stored either way between the two names,
+  // updates every matching edge (all labels unless one is given), returns them all.
+  private adjustWeight(
+    nameA: string,
+    nameB: string,
+    label: string | undefined,
+    delta: number
+  ): Association[] {
+    const sql = `
+      UPDATE associations
+      SET weight = MIN(MAX(weight + ?, 0.0), 10.0), updated_at = datetime('now')
+      WHERE id IN (
+        SELECT assoc.id FROM associations assoc
+        JOIN nodes s ON s.id = assoc.source_id
+        JOIN nodes t ON t.id = assoc.target_id
+        WHERE ((s.name = ? AND t.name = ?) OR (s.name = ? AND t.name = ?))
+        ${label ? "AND assoc.label = ?" : ""}
+      )
+      RETURNING *
+    `;
+    const params = label
+      ? [delta, nameA, nameB, nameB, nameA, label]
+      : [delta, nameA, nameB, nameB, nameA];
+    return this.db.prepare(sql).all(...params) as Association[];
   }
 
   reflect(limit: number = 20): { nodes: BrainNode[]; associations: Association[] } {
@@ -203,18 +218,19 @@ export class Brain {
   }
 
   search(query: string, type?: NodeType, limit: number = 10): BrainNode[] {
+    const pattern = `%${Brain.escapeLike(query)}%`;
     if (type) {
       return this.db
         .prepare(
-          "SELECT * FROM nodes WHERE name LIKE ? AND type = ? ORDER BY weight DESC LIMIT ?"
+          "SELECT * FROM nodes WHERE name LIKE ? ESCAPE '\\' AND type = ? ORDER BY weight DESC LIMIT ?"
         )
-        .all(`%${query}%`, type, limit) as BrainNode[];
+        .all(pattern, type, limit) as BrainNode[];
     }
     return this.db
       .prepare(
-        "SELECT * FROM nodes WHERE name LIKE ? ORDER BY weight DESC LIMIT ?"
+        "SELECT * FROM nodes WHERE name LIKE ? ESCAPE '\\' ORDER BY weight DESC LIMIT ?"
       )
-      .all(`%${query}%`, limit) as BrainNode[];
+      .all(pattern, limit) as BrainNode[];
   }
 
   private trackCoActivation(node: BrainNode): void {
@@ -302,31 +318,38 @@ export class Brain {
     ];
   }
 
-  private getRelated(nodeId: number, maxDepth: number) {
-    // BFS up to maxDepth hops
+  private getRelated(
+    nodeId: number,
+    maxDepth: number,
+    limit: number = Brain.RELATED_LIMIT
+  ) {
+    // BFS up to maxDepth hops, strongest edges first, capped at limit results
     const visited = new Set<number>([nodeId]);
     const results: { node: BrainNode; path: string; distance: number }[] = [];
     let frontier = [{ id: nodeId, path: "", depth: 0 }];
 
-    while (frontier.length > 0) {
+    while (frontier.length > 0 && results.length < limit) {
       const next: typeof frontier = [];
 
       for (const current of frontier) {
         if (current.depth >= maxDepth) continue;
+        if (results.length >= limit) break;
 
         const neighbors = this.db
           .prepare(`
-            SELECT n.*, a.label, 'out' as dir FROM associations a
+            SELECT n.*, a.label, a.weight AS assoc_weight, 'out' as dir FROM associations a
             JOIN nodes n ON n.id = a.target_id
             WHERE a.source_id = ?
             UNION
-            SELECT n.*, a.label, 'in' as dir FROM associations a
+            SELECT n.*, a.label, a.weight AS assoc_weight, 'in' as dir FROM associations a
             JOIN nodes n ON n.id = a.source_id
             WHERE a.target_id = ?
+            ORDER BY assoc_weight DESC
           `)
           .all(current.id, current.id) as (BrainNode & { label: string; dir: string })[];
 
         for (const neighbor of neighbors) {
+          if (results.length >= limit) break;
           if (visited.has(neighbor.id)) continue;
           visited.add(neighbor.id);
 

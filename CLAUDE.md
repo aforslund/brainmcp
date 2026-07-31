@@ -16,15 +16,17 @@ The server communicates over **stdio** (stdin/stdout) using the MCP protocol. It
 
 ## Architecture
 
-BrainMCP is an MCP server (~500 LOC) that provides a persistent weighted knowledge graph as long-term memory for LLMs.
+BrainMCP is an MCP server that provides a persistent weighted knowledge graph as long-term memory for LLMs.
 
 ### Source files (all in `src/`)
 
 - **`types.ts`** — TypeScript interfaces for `BrainNode`, `Association`, `RecallResult`. Node types are: person, place, thing, event, idea, memory, feeling.
-- **`database.ts`** — Creates and initializes the SQLite database (`brain.db` at project root). Sets up WAL mode, foreign keys, and the two tables (`nodes`, `associations`) with their indexes.
+- **`database.ts`** — Creates and initializes the SQLite database (defaults to `~/.brainmcp/brain.db`). Sets up WAL mode, foreign keys, and the two tables (`nodes`, `associations`) with their indexes.
 - **`brain.ts`** — `Brain` class with all graph operations: `remember`, `recall` (with BFS 2-hop traversal + Hebbian co-activation), `associate`, `strengthen`, `weaken`, `reflect`, `forget`, `search`. All methods are synchronous (better-sqlite3 is sync).
-- **`brain.test.ts`** — 35 unit tests covering all Brain methods including co-activation.
-- **`index.ts`** — MCP server entry point. Registers 8 tools with zod schemas, wires them to `Brain` methods, and starts the stdio transport.
+- **`brain.test.ts`** — 42 unit tests covering all Brain methods including co-activation.
+- **`index.ts`** — MCP server entry point. Registers 8 tools with zod schemas (via `registerTool`), wires them to `Brain` methods, and starts the stdio transport. Accepts `--db-path`/`--db` to override the database location.
+- **`visualize.ts`** — Generates a standalone HTML force-graph visualization of a brain database (`npm run viz`, `--db` flag for custom path).
+- **`explore.ts`**, **`explore-cc.ts`**, **`explore-ask.ts`** — Autonomous exploration pipeline: an LLM explores a question, builds a graph in its own `explore-*.db`, and emits analysis + ELI5 markdown and an HTML visualization. `explore.ts` uses the Anthropic API directly; `explore-cc.ts` drives Claude Code; `explore-ask.ts` asks follow-up questions of an existing exploration db.
 
 ### Data model
 
@@ -34,9 +36,12 @@ Two SQLite tables in `brain.db`:
 
 ### Key design decisions
 
-- `associate()` auto-creates source/target nodes if they don't exist (calls `remember` internally).
-- `recall()` falls back to fuzzy LIKE matching when exact name lookup fails.
+- `associate()` auto-creates source/target nodes if they don't exist (calls `remember` internally). Re-associating an existing edge never lowers its accumulated weight — an explicit weight only raises it (use `weaken` to lower).
+- `recall()` falls back to fuzzy LIKE matching when exact name lookup fails; the fuzzy fallback respects the optional `type` filter.
+- `recall()` related-node traversal is capped at 25 results, expanding strongest edges first, so dense graphs don't flood the model's context.
+- LIKE wildcards (`%`, `_`) in `recall`/`search` queries are escaped and matched literally.
+- `strengthen`/`weaken` are direction-agnostic (an edge stored A→B is found when called with B, A), update every matching edge when `label` is omitted, and return all updated associations.
 - `forget()` prunes weak associations first, then removes orphaned nodes — order matters for cascade logic.
 - `strengthen`/`weaken` clamp weights to [0, 10].
-- `recall()` tracks co-activation: nodes recalled within a 5-minute window get automatic `co_activated` edges (initial weight 0.5, +0.1 per co-recall). Uses consistent direction (lower ID → higher ID) to avoid duplicate edges. This is Hebbian learning — "fire together, wire together."
+- `recall()` tracks co-activation: nodes recalled within a 5-minute window get automatic `co_activated` edges (initial weight 0.5, +0.1 per co-recall). Uses consistent direction (lower ID → higher ID) to avoid duplicate edges. This is Hebbian learning — "fire together, wire together." Co-activation state is per-process: multiple MCP clients sharing the same db each track their own window.
 - The database path defaults to `~/.brainmcp/brain.db`.

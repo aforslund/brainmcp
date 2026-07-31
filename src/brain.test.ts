@@ -99,6 +99,15 @@ describe("Brain", () => {
       assert.equal(result.node.name, "Alice Wonderland");
     });
 
+    it("should respect type filter in fuzzy match", () => {
+      brain.remember("Alice Wonderland", "person", undefined, 5.0);
+      brain.remember("Alice Springs", "place", undefined, 1.0);
+      const result = brain.recall("Alice", "place");
+      assert.ok(result);
+      assert.equal(result.node.name, "Alice Springs");
+      assert.equal(result.node.type, "place");
+    });
+
     it("should return null for unknown concepts", () => {
       const result = brain.recall("NonExistent");
       assert.equal(result, null);
@@ -140,6 +149,15 @@ describe("Brain", () => {
       assert.equal(assoc.weight, 5.0);
     });
 
+    it("should not lower accumulated weight on re-association", () => {
+      brain.associate("Alice", "person", "Bob", "person", "knows", 5.0);
+      brain.associate("Alice", "person", "Bob", "person", "knows", 1.0);
+      let result = brain.associate("Alice", "person", "Bob", "person", "knows");
+      assert.equal(result.association.weight, 5.0);
+      result = brain.associate("Alice", "person", "Bob", "person", "knows", 7.0);
+      assert.equal(result.association.weight, 7.0);
+    });
+
     it("should allow multiple labels between same nodes", () => {
       brain.associate("Alice", "person", "Bob", "person", "knows");
       brain.associate("Alice", "person", "Bob", "person", "works_with");
@@ -153,20 +171,36 @@ describe("Brain", () => {
     it("should increase association weight", () => {
       brain.associate("Alice", "person", "Bob", "person", "knows", 1.0);
       const result = brain.strengthen("Alice", "Bob", "knows", 0.5);
-      assert.ok(result);
-      assert.equal(result.weight, 1.5);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].weight, 1.5);
     });
 
     it("should cap weight at 10.0", () => {
       brain.associate("Alice", "person", "Bob", "person", "knows", 9.5);
       const result = brain.strengthen("Alice", "Bob", "knows", 1.0);
-      assert.ok(result);
-      assert.equal(result.weight, 10.0);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].weight, 10.0);
     });
 
-    it("should return null for non-existent association", () => {
+    it("should return empty array for non-existent association", () => {
       const result = brain.strengthen("X", "Y", "z");
-      assert.equal(result, null);
+      assert.equal(result.length, 0);
+    });
+
+    it("should work regardless of direction", () => {
+      brain.associate("Alice", "person", "Bob", "person", "knows", 1.0);
+      const result = brain.strengthen("Bob", "Alice", "knows", 0.5);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].weight, 1.5);
+    });
+
+    it("should update all labels when label is omitted", () => {
+      brain.associate("Alice", "person", "Bob", "person", "knows", 1.0);
+      brain.associate("Alice", "person", "Bob", "person", "works_with", 2.0);
+      const result = brain.strengthen("Alice", "Bob", undefined, 0.5);
+      assert.equal(result.length, 2);
+      const weights = result.map((a) => a.weight).sort();
+      assert.deepEqual(weights, [1.5, 2.5]);
     });
   });
 
@@ -174,15 +208,22 @@ describe("Brain", () => {
     it("should decrease association weight", () => {
       brain.associate("Alice", "person", "Bob", "person", "knows", 1.0);
       const result = brain.weaken("Alice", "Bob", "knows", 0.3);
-      assert.ok(result);
-      assert.ok(Math.abs(result.weight - 0.7) < 0.001);
+      assert.equal(result.length, 1);
+      assert.ok(Math.abs(result[0].weight - 0.7) < 0.001);
     });
 
     it("should floor weight at 0.0", () => {
       brain.associate("Alice", "person", "Bob", "person", "knows", 0.1);
       const result = brain.weaken("Alice", "Bob", "knows", 1.0);
-      assert.ok(result);
-      assert.equal(result.weight, 0.0);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].weight, 0.0);
+    });
+
+    it("should work regardless of direction", () => {
+      brain.associate("Alice", "person", "Bob", "person", "knows", 1.0);
+      const result = brain.weaken("Bob", "Alice", "knows", 0.3);
+      assert.equal(result.length, 1);
+      assert.ok(Math.abs(result[0].weight - 0.7) < 0.001);
     });
   });
 
@@ -254,6 +295,14 @@ describe("Brain", () => {
     it("should return empty for no matches", () => {
       const results = brain.search("NonExistent");
       assert.equal(results.length, 0);
+    });
+
+    it("should treat LIKE wildcards as literals", () => {
+      brain.remember("100% Sure", "idea");
+      brain.remember("Fully Sure", "idea");
+      assert.equal(brain.search("100%").length, 1);
+      assert.equal(brain.search("%").length, 1);
+      assert.equal(brain.search("_").length, 0);
     });
   });
 
@@ -377,6 +426,18 @@ describe("Brain", () => {
       // B should appear only once in related
       const bNodes = result.related.filter((r) => r.node.name === "B");
       assert.equal(bNodes.length, 1);
+    });
+
+    it("should cap related results at 25, keeping strongest edges", () => {
+      for (let i = 0; i < 40; i++) {
+        brain.associate("Hub", "idea", `Spoke${i}`, "thing", "links", (i % 10) + 0.5);
+      }
+      const result = brain.recall("Hub");
+      assert.ok(result);
+      assert.equal(result.related.length, 25);
+      // The strongest neighbor (weight 9.5) must be included
+      const strongest = result.related.find((r) => r.node.name === "Spoke9");
+      assert.ok(strongest);
     });
   });
 });

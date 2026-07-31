@@ -19,6 +19,9 @@
     "model-context-protocol"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "dist/index.js",
   "bin": {
     "brainmcp": "dist/index.js"
